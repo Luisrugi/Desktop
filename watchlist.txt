@@ -1,0 +1,13 @@
+# Watchlist für den Invest-Checker
+# Eine Position pro Zeile. Ticker-Symbol, wie bei Yahoo Finance üblich.
+# Zeilen mit # werden ignoriert. Einfach eigene Werte hinzufügen/entfernen.
+#
+# Beispiele für breit gestreute, konservative ETFs:
+VWCE.DE      # Vanguard FTSE All-World (thesaurierend)
+EUNL.DE      # iShares Core MSCI World
+IUSQ.DE      # iShares Core MSCI World (alt. Ticker)
+EXSA.DE      # iShares Core STOXX Europe 600
+# Beispiele für einzelne, etablierte Aktien (nur zur Veranschaulichung):
+AAPL
+MSFT
+SAP.DE
