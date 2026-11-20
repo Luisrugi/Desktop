@@ -1,0 +1,454 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// SQLite für einfaches, zero-config lokales Dev/Self-Hosting.
+// Für Produktion/Mehrbenutzerbetrieb: datasource auf "postgresql" umstellen
+// (DATABASE_URL anpassen) - das Schema ist dafür kompatibel, SQLite unterstützt
+// nur keine nativen Enums, daher werden Status/Typ-Felder hier als String
+// geführt und per Zod in den Routen validiert (siehe src/routes/*.ts).
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id           String   @id @default(cuid())
+  name         String
+  addressLine1 String?
+  addressLine2 String?
+  postalCode   String?
+  city         String?
+  country      String?
+  taxId        String?
+  vatId        String?
+  iban         String?
+  bic          String?
+  email        String?
+  phone        String?
+  logoUrl      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users    User[]
+  clients  Client[]
+  projects Project[]
+  invoices Invoice[]
+
+  employees        Employee[]
+  suppliers        Supplier[]
+  articles         Article[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+  accounts         Account[]
+  journalEntries   JournalEntry[]
+  bankTransactions BankTransaction[]
+  payrollRuns      PayrollRun[]
+  subscription     Subscription?
+  costCenters      CostCenter[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("EMPLOYEE") // ADMIN | EMPLOYEE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  timeEntries TimeEntry[]
+  employee    Employee?
+}
+
+model Client {
+  id                     String   @id @default(cuid())
+  name                   String
+  contactPerson          String?
+  email                  String?
+  addressLine1           String?
+  addressLine2           String?
+  postalCode             String?
+  city                   String?
+  country                String?
+  vatId                  String?
+  defaultHourlyRateCents Int?
+  notes                  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  projects Project[]
+  invoices Invoice[]
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  hourlyRateCents Int?
+  budgetMinutes   Int?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  timeEntries TimeEntry[]
+}
+
+model TimeEntry {
+  id              String    @id @default(cuid())
+  startTime       DateTime
+  endTime         DateTime?
+  durationMinutes Int?
+  description     String?
+  billable        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  invoiceItemId String?      @unique
+  invoiceItem   InvoiceItem? @relation(fields: [invoiceItemId], references: [id])
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  invoiceNumber  String
+  status         String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | CANCELLED
+  issueDate      DateTime
+  dueDate        DateTime
+  notes          String?
+  reminderLevel  Int       @default(0)
+  lastReminderAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  items InvoiceItem[]
+
+  @@unique([companyId, invoiceNumber])
+}
+
+model InvoiceItem {
+  id             String @id @default(cuid())
+  description    String
+  quantity       Float
+  unitPriceCents Int
+  taxRatePercent Float  @default(19)
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  timeEntry TimeEntry?
+}
+
+// ---------- Mitarbeiterstamm / Personalwesen ----------
+
+model Employee {
+  id                String    @id @default(cuid())
+  personnelNumber   String
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime?
+  hireDate          DateTime
+  exitDate          DateTime?
+  position          String?
+  department        String?
+  employmentType    String? // z.B. "Vollzeit", "Teilzeit", "Minijob"
+  status            String    @default("ACTIVE") // ACTIVE | ON_LEAVE | TERMINATED
+  monthlyGrossCents Int?
+  iban              String?
+  taxIdNumber       String? // Steuer-Identifikationsnummer
+  socialSecurityNo  String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  payrollRuns PayrollRun[]
+  absences    Absence[]
+  documents   EmployeeDocument[]
+
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  @@unique([companyId, personnelNumber])
+}
+
+model CostCenter {
+  id   String @id @default(cuid())
+  code String
+  name String
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  employees Employee[]
+  projects  Project[]
+
+  @@unique([companyId, code])
+}
+
+model Absence {
+  id           String    @id @default(cuid())
+  type         String // URLAUB | KRANK | KIND_KRANK | SONDERURLAUB | UNBEZAHLT | MUTTERSCHUTZ | ELTERNZEIT | BILDUNGSURLAUB | DIENSTREISE | HOMEOFFICE
+  status       String    @default("BEANTRAGT") // BEANTRAGT | GENEHMIGT | ABGELEHNT | STORNIERT
+  startDate    DateTime
+  endDate      DateTime
+  halfDay      Boolean   @default(false)
+  note         String?
+  approvedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+}
+
+model EmployeeDocument {
+  id         String    @id @default(cuid())
+  type       String // z.B. "Führerschein", "Führungszeugnis", "Zertifikat", "Vertrag"
+  title      String
+  fileUrl    String?
+  expiryDate DateTime?
+  createdAt  DateTime  @default(now())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+}
+
+// ---------- Lieferanten / Materialeinkauf ----------
+
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String
+  contactPerson String?
+  email         String?
+  addressLine1  String?
+  addressLine2  String?
+  postalCode    String?
+  city          String?
+  country       String?
+  vatId         String?
+  iban          String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  purchaseOrders   PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+}
+
+model Article {
+  id                 String   @id @default(cuid())
+  sku                String
+  name               String
+  description        String?
+  unit               String   @default("Stk")
+  salesPriceCents    Int?
+  purchasePriceCents Int?
+  taxRatePercent     Float    @default(19)
+  stockQuantity      Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@unique([companyId, sku])
+}
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  orderNumber  String
+  status       String    @default("DRAFT") // DRAFT | ORDERED | PARTIALLY_RECEIVED | RECEIVED | CANCELLED
+  orderDate    DateTime
+  expectedDate DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  items PurchaseOrderItem[]
+
+  @@unique([companyId, orderNumber])
+}
+
+model PurchaseOrderItem {
+  id             String @id @default(cuid())
+  quantity       Float
+  unitPriceCents Int
+  receivedQty    Float  @default(0)
+
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id])
+}
+
+model PurchaseInvoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String
+  status          String   @default("OPEN") // OPEN | PAID | OVERDUE | CANCELLED
+  invoiceDate     DateTime
+  dueDate         DateTime
+  totalNetCents   Int
+  totalTaxCents   Int
+  totalGrossCents Int
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+}
+
+// ---------- Buchhaltung / Controlling ----------
+
+model Account {
+  id   String @id @default(cuid())
+  code String
+  name String
+  type String // ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  debitEntries  JournalEntry[] @relation("DebitAccount")
+  creditEntries JournalEntry[] @relation("CreditAccount")
+
+  @@unique([companyId, code])
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  date        DateTime
+  description String
+  amountCents Int
+  reference   String?
+  createdAt   DateTime @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  debitAccountId String
+  debitAccount   Account @relation("DebitAccount", fields: [debitAccountId], references: [id])
+
+  creditAccountId String
+  creditAccount   Account @relation("CreditAccount", fields: [creditAccountId], references: [id])
+}
+
+// ---------- Bankanbindung (CSV / CAMT.053 Import) ----------
+
+model BankTransaction {
+  id               String   @id @default(cuid())
+  bookingDate      DateTime
+  amountCents      Int
+  counterparty     String?
+  purpose          String?
+  importBatchId    String
+  matched          Boolean  @default(false)
+  matchedInvoiceId String?
+  createdAt        DateTime @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+}
+
+// ---------- Personalabrechnung ----------
+// Hinweis: Es wird KEINE Lohnsteuer-/Sozialversicherungsberechnung durchgeführt.
+// Die Felder dienen als Erfassung/Export-Grundlage fuer Steuerberater/DATEV.
+
+model PayrollRun {
+  id               String   @id @default(cuid())
+  periodYear       Int
+  periodMonth      Int
+  status           String   @default("DRAFT") // DRAFT | FINALIZED | EXPORTED
+  grossAmountCents Int
+  bonusCents       Int      @default(0)
+  deductionCents   Int      @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, periodYear, periodMonth])
+}
+
+// ---------- Pakete / Abo (Billing) ----------
+
+model Plan {
+  id                String  @id @default(cuid())
+  tier              String  @unique // STARTER | BUSINESS | ENTERPRISE
+  name              String
+  priceMonthlyCents Int
+  maxUsers          Int
+  maxEmployees      Int
+  featuresJson      String // JSON-encoded string[] of feature keys enabled for this plan
+  stripePriceId     String?
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  status               String    @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | CANCELLED
+  currentPeriodEnd     DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id])
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+}

@@ -1,0 +1,16 @@
+{
+  "name": "timetrack-suite",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @timetrack/api dev",
+    "dev:web": "pnpm --filter @timetrack/web dev",
+    "build:api": "pnpm --filter @timetrack/api build",
+    "build:web": "pnpm --filter @timetrack/web build",
+    "db:migrate": "pnpm --filter @timetrack/api prisma:migrate",
+    "db:seed": "pnpm --filter @timetrack/api db:seed"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
